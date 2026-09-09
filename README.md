@@ -13,6 +13,11 @@ import Mathlib.Logic.Function.Basic
 open CategoryTheory Function
 universe u v
 
+syntax "spin_simp" : tactic
+
+macro_rules
+  | `(tactic| spin_simp) => `(tactic| simp [SpinDirection.invert, Teramorphism.compose])
+
 /- ========================================================================================
    SECTION 1: GEOMETRIC BASE CATEGORY
    ======================================================================================== -/
@@ -135,9 +140,20 @@ def toggle : SpinDirection → SpinDirection
   | left => right
   | right => left
 
+/-- Alias for spin inversion used by the custom tactic. -/
+def invert : SpinDirection → SpinDirection := toggle
+
 /-- Toggle is an involution -/
 lemma toggle_involution (s : SpinDirection) : toggle (toggle s) = s := by
   cases s <;> rfl
+
+@[simp]
+lemma invert_involution (s : SpinDirection) : invert (invert s) = s := by
+  simpa [invert] using toggle_involution s
+
+/-- Runtime Boolean equality for spin directions. -/
+def isEquivalence (s1 s2 : SpinDirection) : Bool :=
+  s1 == s2
 
 /-- Toggle is bijective -/
 lemma toggle_bijective : Function.Bijective toggle := by
@@ -255,7 +271,7 @@ namespace SheafSection
 def restrict {U V : GeometricOpenSet} (h : V ≤ U) (sec : SheafSection U) :
     SheafSection V :=
   { val := {
-      map := fun i => i
+      map := fun i => Fin.castLE (show V.size ≤ V.size by exact le_rfl) i
       morph_type := sec.val.morph_type
       current_spin := sec.val.current_spin
     } }
@@ -647,6 +663,74 @@ theorem globalActivate_preserves_morphism_type {U : GeometricOpenSet}
 
 /-- Zero iterations of activation do nothing. -/
 theorem iterateActivate_zero {U : GeometricOpenSet} (sec : SheafSection U) :
+    SheafSection.iterateActivate 0 sec = sec := by
+  simp [SheafSection.iterateActivate]
+
+end ExtraProofs
+
+/-- Runtime Boolean equality for geometric open sets. -/
+def isOpenSetEquivalent (U V : GeometricOpenSet) : Bool :=
+  U == V
+
+/-- Pure functional engine state for sequential spin updates. -/
+abbrev EngineState := SpinDirection × Nat
+
+def stepEngine : StateM EngineState Unit := do
+  let (spin, steps) ← get
+  set (SpinDirection.invert spin, steps + 1)
+
+/-- Interactive terminal UI for the ToposCheck engine. -/
+partial def runInteractiveLoop : IO Unit := do
+  IO.println "ToposCheck Engine CLI"
+  IO.println "Commands:"
+  IO.println "  1 -> apply anomaly resolution"
+  IO.println "  0 -> no action"
+  IO.println "  q -> quit"
+  let input ← (← IO.getStdin).getLine
+  match input.trim with
+  | "q" =>
+      IO.println "Exiting ToposCheck Engine."
+  | "1" =>
+      let U : GeometricOpenSet := GeometricOpenSet.mk 1 2
+      let sec : SheafSection U := {
+        val := {
+          map := id
+          morph_type := MorphismType.standard
+          current_spin := SpinDirection.right
+        }
+      }
+      let anomaly : LocalAnomaly U := { is_broken := true }
+      let resolved := resolveWithJoker sec anomaly
+      IO.println s!"Applying transformation... Resolved! Result morph type: {resolved.val.morph_type}"
+      runInteractiveLoop
+  | _ =>
+      IO.println "No action needed."
+      runInteractiveLoop
+
+def main : IO Unit :=
+  runInteractiveLoop
+
+/-- Run a quick runtime check of spin equality. -/
+#eval isEquivalence SpinDirection.left SpinDirection.left
+
+/-- Run a quick runtime check of open-set equality. -/
+#eval isOpenSetEquivalent (GeometricOpenSet.mk 1 2) (GeometricOpenSet.mk 1 2)
+
+/-- Run a quick runtime anomaly-resolution check. -/
+#eval
+  let U : GeometricOpenSet := GeometricOpenSet.mk 1 2
+  let sec : SheafSection U := {
+    val := {
+      map := id
+      morph_type := MorphismType.standard
+      current_spin := SpinDirection.right
+    }
+  }
+  let anomaly : LocalAnomaly U := { is_broken := true }
+  (resolveWithJoker sec anomaly).val.morph_type
+
+end Tests
+
     SheafSection.iterateActivate 0 sec = sec := by
   simp [SheafSection.iterateActivate]
 
