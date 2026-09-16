@@ -1,5 +1,6 @@
 # ToposCheck-ToposCheck.lean
 /-! # Fully Refined & Non-Trivial ToposCheck.lean (Corrected) -/
+
 import Mathlib.CategoryTheory.Category.Basic
 import Mathlib.CategoryTheory.Functor.Basic
 import Mathlib.CategoryTheory.NatTrans
@@ -22,6 +23,7 @@ open CategoryTheory Opposite
 universe u v
 
 /-! ## SECTION 0: AMBIENT SPACE -/
+
 axiom AmbientSpace : Type u
 axiom ambientTopology : TopologicalSpace AmbientSpace
 noncomputable instance : TopologicalSpace AmbientSpace := ambientTopology
@@ -41,10 +43,11 @@ lemma unionLe_right (U V : GeometricOpenSet) : V ≤ union U V := le_sup_right
 end GeometricOpenSet
 
 /-! ## SECTION 1: DYNAMIC MORPHISM TYPES & ALGEBRAIC SPIN -/
+
 inductive MorphismType where
-  | standard      : MorphismType
+  | standard : MorphismType
   | infinitesimal : MorphismType
-  | joker         : MorphismType
+  | joker : MorphismType
   deriving DecidableEq, Repr
 
 namespace MorphismType
@@ -66,7 +69,7 @@ instance : CommMonoid MorphismType where
 end MorphismType
 
 inductive SpinDirection where
-  | left  : SpinDirection
+  | left : SpinDirection
   | right : SpinDirection
   deriving DecidableEq, Repr
 
@@ -95,29 +98,31 @@ instance : CommGroup SpinDirection where
 end SpinDirection
 
 /-! ## SECTION 2: TERAMORPHISM ENGINE -/
+
 structure Teramorphism (U V : GeometricOpenSet) where
-  map          : C(U, V)
-  morph_type   : MorphismType
+  map : C(U, V)
+  morph_type : MorphismType
   current_spin : SpinDirection
-  is_valid     : morph_type = MorphismType.standard → IsHomeomorphism map
+  is_valid : morph_type = MorphismType.standard → IsHomeomorphism map
 
 namespace Teramorphism
+@[simp] def identity (U : GeometricOpenSet) : Teramorphism U U := {
+  map := ContinuousMap.id U
+  morph_type := MorphismType.standard
+  current_spin := SpinDirection.left
+  is_valid := fun _ => Homeomorph.isHomeomorphism (Homeomorph.refl U)
+}
 
-@[simp] def identity (U : GeometricOpenSet) : Teramorphism U U :=
-  { map := ContinuousMap.id U
-    morph_type := MorphismType.standard
-    current_spin := SpinDirection.left
-    is_valid := fun _ => Homeomorph.isHomeomorphism (Homeomorph.refl U) }
-
-def compose {U V W : GeometricOpenSet} (t1 : Teramorphism U V) (t2 : Teramorphism V W) : Teramorphism U W :=
-  { map := t2.map.comp t1.map
-    morph_type := t1.morph_type * t2.morph_type
-    current_spin := t1.current_spin * t2.current_spin
-    is_valid := by
-      intro h
-      have h1 : t1.morph_type = MorphismType.standard ∧ t2.morph_type = MorphismType.standard := by
-        rcases t1.morph_type with _ | _ | _ <;> rcases t2.morph_type with _ | _ | _ <;> simp_all [HMul.hMul, Mul.mul, MorphismType.comp]
-      exact IsHomeomorphism.comp (t2.is_valid h1.2) (t1.is_valid h1.1) }
+def compose {U V W : GeometricOpenSet} (t1 : Teramorphism U V) (t2 : Teramorphism V W) : Teramorphism U W := {
+  map := t2.map.comp t1.map
+  morph_type := t1.morph_type * t2.morph_type
+  current_spin := t1.current_spin * t2.current_spin
+  is_valid := by
+    intro h
+    have h1 : t1.morph_type = MorphismType.standard ∧ t2.morph_type = MorphismType.standard := by
+      rcases t1.morph_type with _ | _ | _ <;> rcases t2.morph_type with _ | _ | _ <;> simp_all [HMul.hMul, Mul.mul, MorphismType.comp]
+    exact IsHomeomorphism.comp (t2.is_valid h1.2) (t1.is_valid h1.1)
+}
 
 infixl:90 " ∘ᵗ " => compose
 
@@ -131,7 +136,6 @@ lemma compose_assoc {U V W Y : GeometricOpenSet} (t1 : Teramorphism U V) (t2 : T
     (t1 ∘ᵗ t2) ∘ᵗ t3 = t1 ∘ᵗ (t2 ∘ᵗ t3) := by
   cases t1; cases t2; cases t3
   simp [compose, mul_assoc]
-
 end Teramorphism
 
 instance : Category GeometricOpenSet where
@@ -143,22 +147,25 @@ instance : Category GeometricOpenSet where
   assoc := Teramorphism.compose_assoc
 
 /-! ## SECTION 3: TWISTED SHEAF SECTIONS -/
+
 structure SheafSection (U : GeometricOpenSet) where
-  val         : Teramorphism U U
+  val : Teramorphism U U
   phase_shift : Int
 
 namespace SheafSection
-
 noncomputable def restrictMap {U V : GeometricOpenSet} (h : V ≤ U) (f : C(U, U)) : C(V, V) where
   toFun x := ⟨(f ⟨x.1, h x.2⟩).1, (f ⟨x.1, h x.2⟩).2⟩
   continuous_toFun := by continuous_subtype_pullback
 
-noncomputable def restrict {U V : GeometricOpenSet} (h : V ≤ U) (sec : SheafSection U) : SheafSection V :=
-  { val := { map := restrictMap h sec.val.map
-             morph_type := sec.val.morph_type
-             current_spin := sec.val.current_spin
-             is_valid := fun _ => IsHomeomorphism.id (TopCat.of V) }
-    phase_shift := sec.phase_shift }
+noncomputable def restrict {U V : GeometricOpenSet} (h : V ≤ U) (sec : SheafSection U) : SheafSection V := {
+  val := {
+    map := restrictMap h sec.val.map
+    morph_type := sec.val.morph_type
+    current_spin := sec.val.current_spin
+    is_valid := fun _ => IsHomeomorphism.id (TopCat.of V)
+  }
+  phase_shift := sec.phase_shift
+}
 
 def AmalgamationReady {U V : GeometricOpenSet} (sU : SheafSection U) (sV : SheafSection V) : Prop :=
   sU.restrict (GeometricOpenSet.overlapLe_left U V) = sV.restrict (GeometricOpenSet.overlapLe_right U V) ∧
@@ -168,22 +175,25 @@ def FamilyCompatible {ι : Type v} (U : ι → GeometricOpenSet) (s : ∀ i, She
   ∀ i j, AmalgamationReady (s i) (s j)
 
 noncomputable def constructIndexedGlobalSection {ι : Type v} [Nonempty ι] {U : GeometricOpenSet}
-    (U_cover : ι → GeometricOpenSet) (h_cover : U = ⨆ i, U_cover i)
-    (s : ∀ i, SheafSection (U_cover i)) (h_compat : FamilyCompatible U_cover s) : SheafSection U :=
-  { val := { map := ContinuousMap.iSup_gluings (fun i => (s i).val.map) (by
-              intro i j x hxi hxj
-              have h_eq := (h_compat i j).1
-              have h_eval := congr_arg (fun sec => sec.val.map ⟨x, ⟨hxi, hxj⟩⟩) h_eq
-              dsimp [restrict, restrictMap] at h_eval
-              exact Subtype.ext_iff.mp h_eval) h_cover
-             morph_type := (s (Classical.arbitrary ι)).val.morph_type
-             current_spin := (s (Classical.arbitrary ι)).val.current_spin
-             is_valid := fun _ => IsHomeomorphism.id _ }
-    phase_shift := (s (Classical.arbitrary ι)).phase_shift }
-
+    (U_cover : ι → GeometricOpenSet) (h_cover : U = ⨆ i, U_cover i) (s : ∀ i, SheafSection (U_cover i))
+    (h_compat : FamilyCompatible U_cover s) : SheafSection U := {
+  val := {
+    map := ContinuousMap.iSup_gluings (fun i => (s i).val.map) (by
+      intro i j x hxi hxj
+      have h_eq := (h_compat i j).1
+      have h_eval := congr_arg (fun sec => sec.val.map ⟨x, ⟨hxi, hxj⟩⟩) h_eq
+      dsimp [restrict, restrictMap] at h_eval
+      exact Subtype.ext_iff.mp h_eval) h_cover
+    morph_type := (s (Classical.arbitrary ι)).val.morph_type
+    current_spin := (s (Classical.arbitrary ι)).val.current_spin
+    is_valid := fun _ => IsHomeomorphism.id _
+  }
+  phase_shift := (s (Classical.arbitrary ι)).phase_shift
+}
 end SheafSection
 
 /-! ## SECTION 4: GROTHENDIECK TOPOS & ANOMALY ABSORPTION -/
+
 def TwistedPresheaf : (GeometricOpenSetᵒᵖ) ⥤ Type u where
   obj U := SheafSection (Opposite.unop U)
   map f sec := SheafSection.restrict f.unop sec
@@ -229,11 +239,12 @@ noncomputable def TwistedSheaf : Sheaf (Opens.grothendieckTopology AmbientSpace)
 
 structure LocalAnomaly (U : GeometricOpenSet) where
   cocycle_degree : Int
-  is_active      : Bool
+  is_active : Bool
 
 def resolveAnomalyWithJoker {U : GeometricOpenSet} (sec : SheafSection U) (anomaly : LocalAnomaly U) : SheafSection U :=
   if anomaly.is_active ∧ anomaly.cocycle_degree ≠ 0 then
-    { val := { sec.val with morph_type := MorphismType.joker }, phase_shift := 0 }
+    { val := { sec.val with morph_type := MorphismType.joker },
+      phase_shift := 0 }
   else
     sec
 
@@ -242,4 +253,3 @@ theorem joker_absorbs_topological_anomaly {U : GeometricOpenSet} (sec : SheafSec
     (resolveAnomalyWithJoker sec anomaly).val.morph_type = MorphismType.joker := by
   unfold resolveAnomalyWithJoker
   simp [h_active, h_non_zero]
- 
