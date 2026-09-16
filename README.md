@@ -1,5 +1,5 @@
 # ToposCheck-ToposCheck.lean
-/-! # Fully Refined & Non-Trivial ToposCheck.lean -/
+/-! # Fully Refined & Non-Trivial ToposCheck.lean (Corrected) -/
 import Mathlib.CategoryTheory.Category.Basic
 import Mathlib.CategoryTheory.Functor.Basic
 import Mathlib.CategoryTheory.NatTrans
@@ -21,7 +21,7 @@ open CategoryTheory Opposite
 
 universe u v
 
-/-! ## SECTION 0: AMBIENT SPACE & MANIFOLD STRUCTURE -/
+/-! ## SECTION 0: AMBIENT SPACE -/
 axiom AmbientSpace : Type u
 axiom ambientTopology : TopologicalSpace AmbientSpace
 noncomputable instance : TopologicalSpace AmbientSpace := ambientTopology
@@ -42,9 +42,9 @@ end GeometricOpenSet
 
 /-! ## SECTION 1: DYNAMIC MORPHISM TYPES & ALGEBRAIC SPIN -/
 inductive MorphismType where
-  | standard      : MorphismType  -- Invertible topological isomorphisms
-  | infinitesimal : MorphismType  -- 1st order derivation / Jet dynamics
-  | joker         : MorphismType  -- Absorbing singularity / Anomaly sinks
+  | standard      : MorphismType
+  | infinitesimal : MorphismType
+  | joker         : MorphismType
   deriving DecidableEq, Repr
 
 namespace MorphismType
@@ -94,14 +94,11 @@ instance : CommGroup SpinDirection where
   inv_mul_cancel a := by decide
 end SpinDirection
 
-/-! ## SECTION 2: NON-TRIVIAL TERAMORPHISM ENGINE -/
-/-- A Teramorphism is not just a map, but a fiberwise differential action paired with a spin phase shift. -/
+/-! ## SECTION 2: TERAMORPHISM ENGINE -/
 structure Teramorphism (U V : GeometricOpenSet) where
   map          : C(U, V)
   morph_type   : MorphismType
   current_spin : SpinDirection
-  -- Non-trivial condition: Standard morphisms strictly enforce homeomorphisms,
-  -- while infinitesimal morphisms enforce locally constant non-zero jacobian conditions.
   is_valid     : morph_type = MorphismType.standard → IsHomeomorphism map
 
 namespace Teramorphism
@@ -145,11 +142,9 @@ instance : Category GeometricOpenSet where
   comp_id := Teramorphism.right_id
   assoc := Teramorphism.compose_assoc
 
-/-! ## SECTION 3: TWISTED SHEAF SECTIONS & ANOMALOUS OBSTRUCTIONS -/
-
-/-- Sections are non-trivial: they carry an intrinsic phase twist (cocycle factor) -/
+/-! ## SECTION 3: TWISTED SHEAF SECTIONS -/
 structure SheafSection (U : GeometricOpenSet) where
-  val        : Teramorphism U U
+  val         : Teramorphism U U
   phase_shift : Int
 
 namespace SheafSection
@@ -165,7 +160,6 @@ noncomputable def restrict {U V : GeometricOpenSet} (h : V ≤ U) (sec : SheafSe
              is_valid := fun _ => IsHomeomorphism.id (TopCat.of V) }
     phase_shift := sec.phase_shift }
 
-/-- Non-trivial Amalgamation: Requires both visual map match AND phase compatibility -/
 def AmalgamationReady {U V : GeometricOpenSet} (sU : SheafSection U) (sV : SheafSection V) : Prop :=
   sU.restrict (GeometricOpenSet.overlapLe_left U V) = sV.restrict (GeometricOpenSet.overlapLe_right U V) ∧
   sU.phase_shift * sU.val.current_spin.toSign = sV.phase_shift * sV.val.current_spin.toSign
@@ -173,16 +167,15 @@ def AmalgamationReady {U V : GeometricOpenSet} (sU : SheafSection U) (sV : Sheaf
 def FamilyCompatible {ι : Type v} (U : ι → GeometricOpenSet) (s : ∀ i, SheafSection (U i)) : Prop :=
   ∀ i j, AmalgamationReady (s i) (s j)
 
-/-- Arbitrary Indexed Sheaf Synthesis under Non-Trivial Compatibility -/
 noncomputable def constructIndexedGlobalSection {ι : Type v} [Nonempty ι] {U : GeometricOpenSet}
     (U_cover : ι → GeometricOpenSet) (h_cover : U = ⨆ i, U_cover i)
     (s : ∀ i, SheafSection (U_cover i)) (h_compat : FamilyCompatible U_cover s) : SheafSection U :=
-  { val := { map := ContinuousMap.gluings (fun i => (s i).val.map) (by
+  { val := { map := ContinuousMap.iSup_gluings (fun i => (s i).val.map) (by
               intro i j x hxi hxj
               have h_eq := (h_compat i j).1
               have h_eval := congr_arg (fun sec => sec.val.map ⟨x, ⟨hxi, hxj⟩⟩) h_eq
               dsimp [restrict, restrictMap] at h_eval
-              exact Subtype.ext_iff.mp (congr_arg Subtype.val h_eval)) h_cover
+              exact Subtype.ext_iff.mp h_eval) h_cover
              morph_type := (s (Classical.arbitrary ι)).val.morph_type
              current_spin := (s (Classical.arbitrary ι)).val.current_spin
              is_valid := fun _ => IsHomeomorphism.id _ }
@@ -190,8 +183,7 @@ noncomputable def constructIndexedGlobalSection {ι : Type v} [Nonempty ι] {U :
 
 end SheafSection
 
-/-! ## SECTION 4: GROTHENDIECK TOPOS & COHOMOLOGICAL OBSTRUCTION -/
-
+/-! ## SECTION 4: GROTHENDIECK TOPOS & ANOMALY ABSORPTION -/
 def TwistedPresheaf : (GeometricOpenSetᵒᵖ) ⥤ Type u where
   obj U := SheafSection (Opposite.unop U)
   map f sec := SheafSection.restrict f.unop sec
@@ -205,10 +197,17 @@ theorem twistedPresheaf_is_sheaf : Presheaf.IsSheaf TwistedPresheaf := by
   refine ⟨sGlobal, ?, ?⟩
   · intro i
     ext
-    · ext x; simp [TwistedPresheaf, SheafSection.constructIndexedGlobalSection, SheafSection.restrict, SheafSection.restrictMap]
+    · ext x; dsimp [TwistedPresheaf, SheafSection.constructIndexedGlobalSection, SheafSection.restrict, SheafSection.restrictMap]
+      rfl
     · rfl
     · rfl
-    · rfl
+    · have h_c := (h_compat i (Classical.arbitrary ι)).2
+      dsimp [TwistedPresheaf, SheafSection.constructIndexedGlobalSection]
+      have h_spin : (s i).val.current_spin = (s (Classical.arbitrary ι)).val.current_spin := by
+        have h1 := congr_arg (fun sec => sec.val.current_spin) (h_compat i (Classical.arbitrary ι)).1
+        exact h1
+      rw [h_spin] at h_c
+      nlinarith [SpinDirection.toSign ((s (Classical.arbitrary ι)).val.current_spin)]
   · intro s' h_match
     ext
     · apply ContinuousMap.ext
@@ -228,9 +227,6 @@ theorem twistedPresheaf_is_sheaf : Presheaf.IsSheaf TwistedPresheaf := by
 noncomputable def TwistedSheaf : Sheaf (Opens.grothendieckTopology AmbientSpace) (Type u) :=
   ⟨TwistedPresheaf, by simpa [Presheaf.IsSheaf, Opens.grothendieckTopology] using twistedPresheaf_is_sheaf⟩
 
-/-! ## SECTION 5: NON-TRIVIAL ANOMALY RESOLUTION & JOKER DYNAMICS -/
-
-/-- Cohomological anomaly representing a localized non-zero curvature / obstruction class -/
 structure LocalAnomaly (U : GeometricOpenSet) where
   cocycle_degree : Int
   is_active      : Bool
@@ -241,10 +237,9 @@ def resolveAnomalyWithJoker {U : GeometricOpenSet} (sec : SheafSection U) (anoma
   else
     sec
 
-/-- THEOREM: Non-trivial anomaly absorption theorem.
-    An active non-zero topological anomaly breaks standard section propagation unless absorbable into a Joker morphism. -/
 theorem joker_absorbs_topological_anomaly {U : GeometricOpenSet} (sec : SheafSection U) (anomaly : LocalAnomaly U)
     (h_active : anomaly.is_active = true) (h_non_zero : anomaly.cocycle_degree ≠ 0) :
     (resolveAnomalyWithJoker sec anomaly).val.morph_type = MorphismType.joker := by
   unfold resolveAnomalyWithJoker
   simp [h_active, h_non_zero]
+ 
